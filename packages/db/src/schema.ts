@@ -5,6 +5,7 @@ import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import {
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
   uniqueIndex,
@@ -74,6 +75,21 @@ export const bookings = sqliteTable(
       .where(sql`${table.cancelledAt} is null`),
     index("bookings_member_start").on(table.memberId, table.startsAt),
   ]
+);
+
+// Members the booker named as coming. The booker is never listed, and the
+// booking's `attendees` headcount may include people who are not named.
+export const bookingAttendees = sqliteTable(
+  "booking_attendees",
+  {
+    bookingId: integer("booking_id")
+      .notNull()
+      .references(() => bookings.id),
+    memberId: integer("member_id")
+      .notNull()
+      .references(() => members.id),
+  },
+  (table) => [primaryKey({ columns: [table.bookingId, table.memberId] })]
 );
 
 export const tasks = sqliteTable("tasks", {

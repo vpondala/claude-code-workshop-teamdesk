@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { type Database, members } from "./schema.ts";
 import type { Member, MemberRole } from "./shared.ts";
 
@@ -30,6 +30,21 @@ export async function getMember(
     .where(eq(members.id, Number(id)))
     .limit(1);
   return row ? toMember(row) : null;
+}
+
+/** The members among `ids` that exist. Unknown ids are left out. */
+export async function getMembersByIds(
+  db: Database,
+  ids: string[]
+): Promise<Member[]> {
+  if (ids.length === 0) {
+    return [];
+  }
+  const rows = await db
+    .select()
+    .from(members)
+    .where(inArray(members.id, ids.map(Number)));
+  return rows.map(toMember);
 }
 
 export async function getMemberByEmail(

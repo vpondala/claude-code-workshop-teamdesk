@@ -1,11 +1,12 @@
-import { and, asc, eq, gt, isNull, lt, ne } from "drizzle-orm";
-import { bookings, type Database } from "./schema.ts";
+import { and, asc, eq, gt, inArray, isNull, lt, ne } from "drizzle-orm";
+import { bookingAttendees, bookings, type Database } from "./schema.ts";
 import type { Booking } from "./shared.ts";
 
 type BookingRow = typeof bookings.$inferSelect;
 
-function toBooking(row: BookingRow): Booking {
+function toBooking(row: BookingRow, attendeeIds: string[]): Booking {
   return {
+    attendeeIds,
     attendees: row.attendees,
     cancelledAt: row.cancelledAt,
     createdAt: row.createdAt,
@@ -18,6 +19,44 @@ function toBooking(row: BookingRow): Booking {
   };
 }
 
+/** Converts rows, loading every booking's attendees in one query. */
+async function withAttendees(
+  db: Database,
+  rows: BookingRow[]
+): Promise<Booking[]> {
+  if (rows.length === 0) {
+    return [];
+  }
+  const links = await db
+    .select()
+    .from(bookingAttendees)
+    .where(
+      inArray(
+        bookingAttendees.bookingId,
+        rows.map((row) => row.id)
+      )
+    )
+    .orderBy(asc(bookingAttendees.memberId));
+  const byBooking = new Map<number, string[]>();
+  for (const link of links) {
+    const ids = byBooking.get(link.bookingId) ?? [];
+    ids.push(String(link.memberId));
+    byBooking.set(link.bookingId, ids);
+  }
+  return rows.map((row) => toBooking(row, byBooking.get(row.id) ?? []));
+}
+
+async function oneWithAttendees(
+  db: Database,
+  row: BookingRow | undefined
+): Promise<Booking | null> {
+  if (!row) {
+    return null;
+  }
+  const [booking] = await withAttendees(db, [row]);
+  return booking ?? null;
+}
+
 export async function getBooking(
   db: Database,
   id: string
@@ -27,7 +66,7 @@ export async function getBooking(
     .from(bookings)
     .where(eq(bookings.id, Number(id)))
     .limit(1);
-  return row ? toBooking(row) : null;
+  return oneWithAttendees(db, row);
 }
 
 /** Active bookings of a room that start in [from, to), earliest first. */
@@ -48,7 +87,7 @@ export async function listRoomBookings(
       )
     )
     .orderBy(asc(bookings.startsAt));
-  return rows.map(toBooking);
+  return withAttendees(db, rows);
 }
 
 /** A member's active bookings that end after `from`, earliest first. */
@@ -68,7 +107,7 @@ export async function listMemberBookings(
       )
     )
     .orderBy(asc(bookings.startsAt));
-  return rows.map(toBooking);
+  return withAttendees(db, rows);
 }
 
 /**
@@ -96,12 +135,13 @@ export async function findOverlappingBookings(
         input.excludeId ? ne(bookings.id, Number(input.excludeId)) : undefined
       )
     );
-  return rows.map(toBooking);
+  return withAttendees(db, rows);
 }
 
 export async function insertBooking(
   db: Database,
   input: {
+    attendeeIds: string[];
     attendees: number;
     endsAt: string;
     memberId: string;
@@ -110,10 +150,11 @@ export async function insertBooking(
     title: string;
   }
 ): Promise<Booking> {
+  const { attendeeIds, ...fields } = input;
   const [row] = await db
     .insert(bookings)
     .values({
-      ...input,
+      ...fields,
       createdAt: new Date().toISOString(),
       memberId: Number(input.memberId),
       roomId: Number(input.roomId),
@@ -122,7 +163,21 @@ export async function insertBooking(
   if (!row) {
     throw new Error("Booking was inserted but could not be read back.");
   }
-  return toBooking(row);
+  // D1 has no interactive transactions, so this is a second statement. The
+  // service validates everything first, so only a database failure between
+  // the two can leave a booking without its attendees.
+  if (attendeeIds.length > 0) {
+    await db.insert(bookingAttendees).values(
+      attendeeIds.map((memberId) => ({
+        bookingId: row.id,
+        memberId: Number(memberId),
+      }))
+    );
+  }
+  return toBooking(
+    row,
+    [...attendeeIds].sort((a, b) => Number(a) - Number(b))
+  );
 }
 
 export async function updateBookingTimes(
@@ -135,7 +190,7 @@ export async function updateBookingTimes(
     .set(times)
     .where(eq(bookings.id, Number(id)))
     .returning();
-  return row ? toBooking(row) : null;
+  return oneWithAttendees(db, row);
 }
 
 export async function cancelBooking(
@@ -147,5 +202,5 @@ export async function cancelBooking(
     .set({ cancelledAt: new Date().toISOString() })
     .where(and(eq(bookings.id, Number(id)), isNull(bookings.cancelledAt)))
     .returning();
-  return row ? toBooking(row) : null;
+  return oneWithAttendees(db, row);
 }

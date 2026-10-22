@@ -15,6 +15,13 @@
       "when": 1792473871939,
       "tag": "0001_team",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792712573653,
+      "tag": "0002_booking_attendees",
+      "breakpoints": true
     }
   ]
 }
