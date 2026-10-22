@@ -1,53 +1,45 @@
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Monitor, Moon, Rainbow, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
-
-type ThemeMode = "light" | "dark" | "auto";
-
-const NEXT_MODE: Record<ThemeMode, ThemeMode> = {
-  auto: "light",
-  dark: "auto",
-  light: "dark",
-};
+import {
+  followsSystem,
+  NEXT_MODE,
+  parseThemeMode,
+  resolveTheme,
+  type ThemeMode,
+} from "#/lib/theme";
 
 const MODE_LABEL: Record<ThemeMode, string> = {
   auto: "Auto",
   dark: "Dark",
   light: "Light",
+  rainbow: "Rainbow",
 };
 
 const MODE_ICON = {
   auto: Monitor,
   dark: Moon,
   light: Sun,
+  rainbow: Rainbow,
 } as const;
-
-function resolveTheme(mode: ThemeMode, prefersDark: boolean): "light" | "dark" {
-  if (mode === "auto") {
-    return prefersDark ? "dark" : "light";
-  }
-  return mode;
-}
 
 function getInitialMode(): ThemeMode {
   if (typeof window === "undefined") {
     return "auto";
   }
 
-  const stored = window.localStorage.getItem("theme");
-  if (stored === "light" || stored === "dark" || stored === "auto") {
-    return stored;
-  }
-
-  return "auto";
+  return parseThemeMode(window.localStorage.getItem("theme"));
 }
 
 function applyThemeMode(mode: ThemeMode) {
   const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   const resolved = resolveTheme(mode, prefersDark);
 
-  document.documentElement.classList.remove("light", "dark");
+  document.documentElement.classList.remove("light", "dark", "rainbow");
   document.documentElement.classList.add(resolved);
+  if (mode === "rainbow") {
+    document.documentElement.classList.add("rainbow");
+  }
 
   if (mode === "auto") {
     document.documentElement.removeAttribute("data-theme");
@@ -68,12 +60,12 @@ export default function ThemeToggle() {
   }, []);
 
   useEffect(() => {
-    if (mode !== "auto") {
+    if (!followsSystem(mode)) {
       return;
     }
 
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => applyThemeMode("auto");
+    const onChange = () => applyThemeMode(mode);
 
     media.addEventListener("change", onChange);
     return () => {
@@ -88,10 +80,12 @@ export default function ThemeToggle() {
     window.localStorage.setItem("theme", nextMode);
   }
 
-  const label =
-    mode === "auto"
-      ? "Theme mode: auto (system). Click to switch to light mode."
-      : `Theme mode: ${mode}. Click to switch mode.`;
+  let label = `Theme mode: ${mode}. Click to switch mode.`;
+  if (mode === "auto") {
+    label = "Theme mode: auto (system). Click to switch to light mode.";
+  } else if (mode === "rainbow") {
+    label = "Theme mode: rainbow (follows system). Click to switch mode.";
+  }
 
   const ModeIcon = MODE_ICON[mode];
 
