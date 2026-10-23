@@ -77,6 +77,10 @@ function BookingsPage() {
     () => new Map(members.map((member) => [member.id, member.name])),
     [members]
   );
+  const others = useMemo(
+    () => members.filter((member) => member.id !== actorId),
+    [actorId, members]
+  );
   const roomNames = useMemo(
     () => new Map(rooms.map((r) => [r.id, r.name])),
     [rooms]
@@ -141,16 +145,32 @@ function BookingsPage() {
     [actorId, cancelBooking.run, loadUpcoming]
   );
 
+  const withAttendees = useCallback(
+    (text: string, booking: Booking) =>
+      booking.attendeeIds.length > 0
+        ? `${text} · with ${booking.attendeeIds
+            .map((id) => memberNames.get(id) ?? "unknown member")
+            .join(", ")}`
+        : text,
+    [memberNames]
+  );
+
   const describeForRoom = useCallback(
     (booking: Booking) =>
-      `booked by ${memberNames.get(booking.memberId) ?? "unknown member"}`,
-    [memberNames]
+      withAttendees(
+        `booked by ${memberNames.get(booking.memberId) ?? "unknown member"}`,
+        booking
+      ),
+    [memberNames, withAttendees]
   );
 
   const describeUpcoming = useCallback(
     (booking: Booking) =>
-      `${roomNames.get(booking.roomId) ?? "archived room"} on ${booking.startsAt.slice(0, 10)}`,
-    [roomNames]
+      withAttendees(
+        `${roomNames.get(booking.roomId) ?? "archived room"} on ${booking.startsAt.slice(0, 10)}`,
+        booking
+      ),
+    [roomNames, withAttendees]
   );
 
   return (
@@ -200,6 +220,7 @@ function BookingsPage() {
               day={day}
               error={createBooking.error}
               onSubmit={handleCreate}
+              others={others}
               pending={createBooking.pending}
             />
           </div>

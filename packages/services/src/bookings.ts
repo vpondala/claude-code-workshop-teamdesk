@@ -10,6 +10,7 @@ import {
   listRoomBookings,
   updateBookingTimes,
 } from "@repo/db/bookings";
+import { getMembersByIds } from "@repo/db/members";
 import { getRoom } from "@repo/db/rooms";
 import {
   BOOKING_MAX_MINUTES,
@@ -31,6 +32,8 @@ import { requireMember } from "./members.ts";
 import { minutesBetween, toUtcIso, utcDayBounds } from "./time.ts";
 
 export const createBookingInput = z.object({
+  // Members the booker names as coming, not including the booker.
+  attendeeIds: z.array(z.string().min(1)).default([]),
   attendees: z.int().min(1, "At least one person must attend."),
   endsAt: z.iso.datetime(),
   roomId: z.string().min(1),
@@ -88,6 +91,33 @@ function checkSlot(startsAt: string, endsAt: string): void {
   }
 }
 
+/**
+ * Checks the named attendees: real members, no repeats, not the booker, and
+ * no more of them than the headcount leaves room for besides the booker.
+ */
+async function checkAttendees(
+  db: Database,
+  actorId: string,
+  attendeeIds: string[],
+  headcount: number
+): Promise<void> {
+  if (new Set(attendeeIds).size !== attendeeIds.length) {
+    throw new ValidationError("Each attendee can only be named once.");
+  }
+  if (attendeeIds.includes(actorId)) {
+    throw new ValidationError("You're already attending your own booking.");
+  }
+  if (attendeeIds.length + 1 > headcount) {
+    throw new ValidationError(
+      `You named ${attendeeIds.length} ${attendeeIds.length === 1 ? "person" : "people"} besides yourself but booked for ${headcount}.`
+    );
+  }
+  const found = await getMembersByIds(db, attendeeIds);
+  if (found.length !== attendeeIds.length) {
+    throw new ValidationError("Some attendees are not team members.");
+  }
+}
+
 /** How many active bookings the member starts on the UTC day `iso` falls on. */
 async function countBookingsOnDay(
   db: Database,
@@ -133,6 +163,7 @@ export const createBookingsService = (db: Database): BookingsService => ({
     const startsAt = toUtcIso(data.startsAt);
     const endsAt = toUtcIso(data.endsAt);
     checkSlot(startsAt, endsAt);
+    await checkAttendees(db, actorId, data.attendeeIds, data.attendees);
 
     const room = await getRoom(db, data.roomId);
     if (!room || room.archived) {
@@ -165,7 +196,8 @@ export const createBookingsService = (db: Database): BookingsService => ({
     // The overlap check above can race with another request for the same
     // slot. The unique index on (room, start) catches that case.
     try {
-      return insertBooking(db, {
+      return await insertBooking(db, {
+        attendeeIds: data.attendeeIds,
         attendees: data.attendees,
         endsAt,
         memberId: actorId,

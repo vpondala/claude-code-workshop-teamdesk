@@ -102,6 +102,17 @@
 
   /* Terracotta text needs a darker step to pass AA on paper. */
   --brand-label: oklch(0.5585 0.1322 38.91); /* #b35434 */
+
+  /* Decorative only: carries no text, same for both surfaces. */
+  --rainbow-gradient: linear-gradient(
+    90deg,
+    oklch(0.63 0.22 25),
+    oklch(0.75 0.17 60),
+    oklch(0.88 0.17 100),
+    oklch(0.7 0.18 145),
+    oklch(0.6 0.18 255),
+    oklch(0.55 0.2 300)
+  );
 }
 
 /* Dark variant: the same hues with paper and ink swapped. */
@@ -139,6 +150,23 @@
   --sidebar-ring: var(--brand-terracotta);
 
   --brand-label: oklch(0.7187 0.1122 39.57); /* #e08b6e */
+}
+
+/* Rainbow mode: accents only, on top of light or dark. */
+.rainbow {
+  --chart-1: oklch(0.62 0.17 25);
+  --chart-2: oklch(0.62 0.17 97);
+  --chart-3: oklch(0.62 0.17 169);
+  --chart-4: oklch(0.62 0.17 241);
+  --chart-5: oklch(0.62 0.17 313);
+}
+
+.dark.rainbow {
+  --chart-1: oklch(0.74 0.17 25);
+  --chart-2: oklch(0.74 0.17 97);
+  --chart-3: oklch(0.74 0.17 169);
+  --chart-4: oklch(0.74 0.17 241);
+  --chart-5: oklch(0.74 0.17 313);
 }
 
 @layer base {
@@ -237,6 +265,19 @@ body {
   .nav-link::after {
     bottom: -4px;
   }
+}
+
+.rainbow .site-header::before {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 3px;
+  content: "";
+  background: var(--rainbow-gradient);
+}
+
+.rainbow .nav-link::after {
+  background: var(--rainbow-gradient);
 }
 
 .site-footer {

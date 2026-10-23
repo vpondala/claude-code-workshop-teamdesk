@@ -17,6 +17,7 @@ beforeEach(async () => {
 describe("availability service", () => {
   test("a booked room is not free, a touching slot is", async () => {
     await insertBooking(team.db, {
+      attendeeIds: [],
       attendees: 2,
       endsAt: at("10:00"),
       memberId: team.ana.id,

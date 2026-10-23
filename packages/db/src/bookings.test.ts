@@ -33,6 +33,7 @@ beforeEach(async () => {
 
 const book = (startsAt: string, endsAt: string) =>
   insertBooking(db, {
+    attendeeIds: [],
     attendees: 2,
     endsAt,
     memberId,

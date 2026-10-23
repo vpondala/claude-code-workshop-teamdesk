@@ -32,6 +32,9 @@ export interface Room {
 }
 
 export interface Booking {
+  /** Members the booker named as coming, not including the booker. */
+  attendeeIds: string[];
+  /** Headcount, booker included. May exceed the named attendees. */
   attendees: number;
   cancelledAt: string | null;
   createdAt: string;

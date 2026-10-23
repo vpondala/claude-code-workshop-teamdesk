@@ -164,4 +164,99 @@ describe("bookings service", () => {
 
     expect(tomorrow.startsAt).toBe(nextDay("09:00"));
   });
+
+  describe("attendees", () => {
+    test("named attendees are stored and listed with the booking", async () => {
+      const booking = await bookings.create(team.ana.id, {
+        ...standUp(team.bigRoom.id),
+        attendeeIds: [team.ben.id, team.admin.id],
+        attendees: 4,
+      });
+
+      const expected = [team.admin.id, team.ben.id].sort(
+        (a, b) => Number(a) - Number(b)
+      );
+      expect(booking.attendeeIds).toEqual(expected);
+      expect(await bookings.listForRoom(team.bigRoom.id, at("00:00"))).toEqual([
+        booking,
+      ]);
+      expect(await bookings.listUpcoming(team.ana.id, at("00:00"))).toEqual([
+        booking,
+      ]);
+    });
+
+    test("naming nobody is fine", async () => {
+      const booking = await bookings.create(
+        team.ana.id,
+        standUp(team.bigRoom.id)
+      );
+
+      expect(booking.attendeeIds).toEqual([]);
+    });
+
+    test("attendees only show on the booker's upcoming list", async () => {
+      await bookings.create(team.ana.id, {
+        ...standUp(team.bigRoom.id),
+        attendeeIds: [team.ben.id],
+      });
+
+      expect(await bookings.listUpcoming(team.ben.id, at("00:00"))).toEqual([]);
+    });
+
+    test("create refuses a repeated attendee", async () => {
+      await expect(
+        bookings.create(team.ana.id, {
+          ...standUp(team.bigRoom.id),
+          attendeeIds: [team.ben.id, team.ben.id],
+          attendees: 3,
+        })
+      ).rejects.toMatchObject({ code: "VALIDATION" });
+    });
+
+    test("create refuses the booker as a named attendee", async () => {
+      await expect(
+        bookings.create(team.ana.id, {
+          ...standUp(team.bigRoom.id),
+          attendeeIds: [team.ana.id],
+        })
+      ).rejects.toMatchObject({ code: "VALIDATION" });
+    });
+
+    test("create refuses someone who is not a member", async () => {
+      await expect(
+        bookings.create(team.ana.id, {
+          ...standUp(team.bigRoom.id),
+          attendeeIds: ["9999"],
+        })
+      ).rejects.toMatchObject({ code: "VALIDATION" });
+    });
+
+    test("named attendees plus the booker must fit the headcount", async () => {
+      await expect(
+        bookings.create(team.ana.id, {
+          ...standUp(team.bigRoom.id),
+          attendeeIds: [team.ben.id, team.admin.id],
+          attendees: 2,
+        })
+      ).rejects.toMatchObject({ code: "VALIDATION" });
+
+      const booking = await bookings.create(team.ana.id, {
+        ...standUp(team.bigRoom.id),
+        attendeeIds: [team.ben.id],
+        attendees: 2,
+      });
+      expect(booking.attendeeIds).toEqual([team.ben.id]);
+    });
+
+    test("a cancelled booking keeps its attendees", async () => {
+      const booking = await bookings.create(team.ana.id, {
+        ...standUp(team.bigRoom.id),
+        attendeeIds: [team.ben.id],
+      });
+
+      const cancelled = await bookings.cancel(team.ana.id, booking.id);
+
+      expect(cancelled.attendeeIds).toEqual([team.ben.id]);
+    });
+  });
 });
